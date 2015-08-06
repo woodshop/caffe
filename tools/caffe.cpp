@@ -1,3 +1,8 @@
+#ifdef WITH_PYTHON_LAYER
+#include "boost/python.hpp"
+namespace bp = boost::python;
+#endif
+
 #include <glog/logging.h>
 
 #include <cstring>
@@ -187,8 +192,8 @@ int test() {
   for (int i = 0; i < test_score.size(); ++i) {
     const std::string& output_name = caffe_net.blob_names()[
         caffe_net.output_blob_indices()[test_score_output_id[i]]];
-    const float loss_weight =
-        caffe_net.blob_loss_weights()[caffe_net.output_blob_indices()[i]];
+    const float loss_weight = caffe_net.blob_loss_weights()[
+        caffe_net.output_blob_indices()[test_score_output_id[i]]];
     std::ostringstream loss_msg_stream;
     const float mean_score = test_score[i] / FLAGS_iterations;
     if (loss_weight) {
@@ -252,9 +257,6 @@ int time() {
     forward_timer.Start();
     for (int i = 0; i < layers.size(); ++i) {
       timer.Start();
-      // Although Reshape should be essentially free, we include it here
-      // so that we will notice Reshape performance bugs.
-      layers[i]->Reshape(bottom_vecs[i], top_vecs[i]);
       layers[i]->Forward(bottom_vecs[i], top_vecs[i]);
       forward_time_per_layer[i] += timer.MicroSeconds();
     }
@@ -307,7 +309,16 @@ int main(int argc, char** argv) {
   // Run tool or show usage.
   caffe::GlobalInit(&argc, &argv);
   if (argc == 2) {
-    return GetBrewFunction(caffe::string(argv[1]))();
+#ifdef WITH_PYTHON_LAYER
+    try {
+#endif
+      return GetBrewFunction(caffe::string(argv[1]))();
+#ifdef WITH_PYTHON_LAYER
+    } catch (bp::error_already_set) {
+      PyErr_Print();
+      return 1;
+    }
+#endif
   } else {
     gflags::ShowUsageWithFlagsRestrict(argv[0], "tools/caffe");
   }
